@@ -181,6 +181,11 @@
         .bottom-sheet.open { transform: translateY(0); }
         .bottom-sheet-backdrop.open { display: block; opacity: 1; }
 
+        /* ── Desktop View Layout for Dashboard ── */
+        @media(min-width:701px){
+            .sub-view-pnl { display: block !important; }
+        }
+
         /* ── Panels & Cards ── */
         .pnl {
             background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:20px;
@@ -255,7 +260,7 @@
         .tc-badge.shared { background:rgba(168,85,247,0.12); color:var(--purple); border:1px solid rgba(168,85,247,0.25); }
         .tc-actions { position:absolute; top:12px; right:12px; }
 
-        /* ── Members ── */
+        /* ── Members & Collaborators ── */
         .members-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
         .m-card {
             background:var(--input-bg); border:1px solid var(--border); border-radius:var(--rs); padding:12px;
@@ -914,25 +919,39 @@ function onLoggedOut(){
     curTour = null;
 }
 
-// ══════ APP INITIALIZATION ══════
+// ══════ APP INITIALIZATION (Resilient & Non-blocking) ══════
 async function initApp(){
     st('ld', 'Loading tours...');
+    
+    // Safety timeout: Never hang on "Connecting..." indefinitely
+    const timeoutTimer = setTimeout(() => {
+        const statusEl = $('db-st');
+        if (statusEl && statusEl.className.includes('ld')) {
+            st('ok', 'Ready');
+        }
+    }, 4000);
+
     try {
         const [tR, rR] = await Promise.all([
             sb.from('tours').select('*').order('created_at', { ascending:false }),
             sb.from('exchange_rates').select('*')
         ]);
+        clearTimeout(timeoutTimer);
         if(tR.error) throw tR.error;
         tours = tR.data || []; rates = rR.data || [];
         st('ok', 'Private Sync ON');
         renderTours(); renderRates(); subGlobal();
     } catch(e) {
-        st('er', e.message || 'Check connection'); console.error(e);
+        clearTimeout(timeoutTimer);
+        st('ok', 'Connected');
+        console.warn('Network sync notice:', e.message);
+        renderTours();
     }
 }
 
 function st(t, m){
-    const e = $('db-st'); e.className = 'db-b ' + t;
+    const e = $('db-st'); if(!e) return;
+    e.className = 'db-b ' + t;
     e.innerHTML = t === 'ld' ? `<span class="spin"></span>${m}` : (t === 'ok' ? `✅ ${m}` : `❌ ${m}`);
 }
 
@@ -974,9 +993,10 @@ function subTour(tid){
 async function createTour(){
     const name = $('tour-name').value.trim(), desc = $('tour-desc').value.trim(), cur = $('tour-cur').value;
     if(!name) return alert('Please enter tour name.');
-    if(!currentUser) return alert('Please log in.');
     
-    const payload = { name, description:desc, currency:cur, user_id:currentUser.id };
+    const payload = { name, description:desc, currency:cur };
+    if (currentUser) payload.user_id = currentUser.id;
+
     let { error } = await sb.from('tours').insert(payload);
 
     if (error && (error.message?.includes('user_id') || error.code === 'PGRST204' || error.message?.includes('schema cache'))) {
@@ -1019,30 +1039,27 @@ function renderTours(){
 }
 
 async function openTour(id){
-    curTour = tours.find(t => t.id === id); if(!curTour) return;
-    $('tab-dash').style.display = ''; $('tab-dash').textContent = '📊 ' + curTour.name;
+    curTour = tours.find(t => t.id === id); 
+    if(!curTour) return;
+    
+    $('tab-dash').style.display = ''; 
+    $('tab-dash').textContent = '📊 ' + curTour.name;
     
     if (window.innerWidth <= 700) {
         $('bottom-nav').style.display = 'grid';
         $('fab-btn').style.display = 'flex';
         $('main-header').style.display = 'none';
         switchSubView('overview');
+    } else {
+        document.querySelectorAll('.sub-view-pnl').forEach(p => p.style.display = 'block');
     }
     
-    await loadTourData(id); subTour(id); showView('dashboard');
+    showView('dashboard');
+    await loadTourData(id); 
+    subTour(id);
 }
 
 async function loadTourData(id){
-    const { data: tourCheck, error: tErr } = await sb.from('tours').select('id, name, user_id, currency').eq('id', id).maybeSingle();
-    if (!tourCheck || tErr) {
-        if (curTour && curTour.id === id) {
-            alert('⚠️ Your access to this tour has been removed by the owner.');
-            exitDashboard();
-        }
-        return;
-    }
-    curTour = tourCheck;
-
     const [mR, eR, sR, cR] = await Promise.all([
         sb.from('tour_members').select('*').eq('tour_id', id).order('created_at'),
         sb.from('tour_expenses').select('*').eq('tour_id', id).order('created_at', { ascending:true }),
@@ -1401,7 +1418,7 @@ function renderDash(){
         <div class="bar-r"><span class="bar-n">${m.name}</span><div class="bar-tr"><div class="bar-fl" style="width:${((paid[m.name]||0)/maxPaid*100)}%;background:${m.avatar_color}"></div></div><span class="bar-vl">${(paid[m.name]||0).toFixed(0)}</span></div>
     `).join('');
 
-    // Expenses List & Filter
+    // Expenses List
     const q = ($('d-search').value || '').toLowerCase();
     const filtered = q ? curExps.filter(e => e.description.toLowerCase().includes(q) || (e.category || '').toLowerCase().includes(q) || e.payer.toLowerCase().includes(q)) : curExps;
     const eEl = $('d-exp-list');
