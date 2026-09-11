@@ -50,7 +50,7 @@
         /* ── Auth Screen ── */
         .auth-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
         .auth-box {
-            background:var(--card); border:1px solid var(--border); border-radius:24px; padding:36px 24px;
+            background:var(--card); border:1px solid var(--border); border-radius:24px; padding:36px 28px;
             width:100%; max-width:420px; backdrop-filter:blur(20px); text-align:center; box-shadow:0 12px 40px var(--shadow);
         }
         .auth-box h1 {
@@ -195,7 +195,7 @@
         .fi label { font-size:0.62rem; color:var(--dim); text-transform:uppercase; letter-spacing:1px; font-weight:600; }
         .fi input, .fi select, .fi textarea {
             padding:12px 14px; border-radius:var(--rs); border:1px solid var(--border);
-            background:var(--input-bg); color:var(--text); font-size:16px; outline:none; /* Force 16px to prevent iOS auto-zoom */
+            background:var(--input-bg); color:var(--text); font-size:16px; outline:none;
             font-family:'Inter',sans-serif; transition:all .3s;
         }
         .fi input:focus, .fi select:focus { border-color:var(--gold); background:var(--card-h); }
@@ -272,6 +272,18 @@
             display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px;
             background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.2); font-size:0.72rem; color:var(--purple); margin:4px;
         }
+
+        /* ── Stats ── */
+        .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+        .st { background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 14px; position:relative; overflow:hidden; }
+        .st::after { content:''; position:absolute; top:0; right:0; width:45px; height:45px; border-radius:50%; filter:blur(22px); opacity:0.12; }
+        .st.g::after { background:var(--gold); } .st.b::after { background:var(--blue); }
+        .st.gr::after { background:var(--green); } .st.r::after { background:var(--red); }
+        .st-l { font-size:0.6rem; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; font-weight:600; }
+        .st-v { font-size:1.35rem; font-weight:800; }
+        .st-u { font-size:0.7rem; color:var(--dim); font-weight:400; margin-left:3px; }
+        .st.g .st-v { color:var(--gold-l); } .st.b .st-v { color:var(--blue-l); }
+        .st.gr .st-v { color:var(--green); } .st.r .st-v { color:var(--red); }
 
         /* ── Person Cards ── */
         .p-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px; margin-bottom:18px; }
@@ -445,9 +457,9 @@
         
         <div class="auth-error" id="auth-error"></div>
 
-        <p style="margin-top:20px;font-size:0.75rem;color:var(--dimmer);">
-            🔒 Your tours are private to you and anyone you invite.
-        </p>
+        <!-- ⚡ Guest Mode (Skip Login) -->
+        <div class="guest-divider"><span>OR</span></div>
+        <button class="btn-guest" onclick="continueAsGuest()">⚡ Continue as Guest (Skip Login)</button>
     </div>
 </div>
 
@@ -509,7 +521,7 @@
         </div>
     </div>
 
-    <!-- ── ACTIVE TOUR DASHBOARD (Desktop Grid layout, Mobile Bottom-Nav controlled) ── -->
+    <!-- ── ACTIVE TOUR DASHBOARD ── -->
     <div id="view-dashboard" style="display:none">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
             <button class="btn btn-ghost btn-sm" onclick="exitDashboard()">← Back to My Tours</button>
@@ -632,7 +644,7 @@
             </div>
         </div>
 
-        <!-- MOBILE SUB-VIEW: REPORTS (Uses active tab rendering) -->
+        <!-- MOBILE SUB-VIEW: REPORTS -->
         <div class="sub-view-pnl" id="sub-view-reports">
             <div class="pnl">
                 <div class="pnl-hd"><div class="pnl-t">📑 Spending Reports</div></div>
@@ -759,7 +771,7 @@ function showToast(title, body){
 
 // ══════ MOBILE BOTTOM SHEET FORM CONTROLS ══════
 function openBottomSheet(){
-    buildExpForm(); // Populate sheet dynamically
+    buildExpForm();
     $('bottom-sheet-backdrop').classList.add('open');
     $('bottom-sheet-form').classList.add('open');
 }
@@ -814,7 +826,6 @@ function renderSubReports(){
     }).join('');
 }
 
-// Exit active dashboard correctly on mobile/desktop
 function exitDashboard(){
     curTour = null;
     $('tab-dash').style.display = 'none';
@@ -920,6 +931,11 @@ async function initApp(){
     }
 }
 
+function st(t, m){
+    const e = $('db-st'); e.className = 'db-b ' + t;
+    e.innerHTML = t === 'ld' ? `<span class="spin"></span>${m}` : (t === 'ok' ? `✅ ${m}` : `❌ ${m}`);
+}
+
 // ══════ REALTIME SYNC ══════
 function subGlobal(){
     if (globalChannel) { sb.removeChannel(globalChannel); globalChannel = null; }
@@ -1006,7 +1022,6 @@ async function openTour(id){
     curTour = tours.find(t => t.id === id); if(!curTour) return;
     $('tab-dash').style.display = ''; $('tab-dash').textContent = '📊 ' + curTour.name;
     
-    // Show PWA Bottom Navigation Controls on Mobile Viewports
     if (window.innerWidth <= 700) {
         $('bottom-nav').style.display = 'grid';
         $('fab-btn').style.display = 'flex';
@@ -1477,7 +1492,6 @@ function buildExpForm(){
     const baseCur = curTour.currency;
     const formTarget = window.innerWidth <= 700 ? $('mobile-exp-form') : $('exp-form');
     
-    // Clear old styling for responsive swap
     if(window.innerWidth > 700){
         formTarget.style.gridTemplateColumns = '2fr 1fr 1fr 1fr 1fr auto';
     } else {
